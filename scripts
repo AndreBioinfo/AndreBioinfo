@@ -1,0 +1,66 @@
+import pandas as pd
+caminho_arquivo = r'C:/users/andre/Downloads/A22CCC_3_table.txt'
+caminho_arquivo2 = r'C:/users/andre/Downloads/A22CSC_8_table.txt'
+caminho_arquivo3 = r'C:/users/andre/Downloads/A22ACC_13_table.txt'
+caminho_arquivo4 = r'C:/users/andre/Downloads/A22ASC_18_table.txt'
+
+# Importa o DataFrame a partir do arquivo .txt separado por tabulação
+dfCCC = pd.read_csv(caminho_arquivo, sep='\t')
+dfCSC = pd.read_csv(caminho_arquivo2, sep='\t')
+dfACC = pd.read_csv(caminho_arquivo3, sep='\t')
+dfASC = pd.read_csv(caminho_arquivo4, sep='\t')
+
+dfCCC_SF = dfCCC[["S", "Frequência"]]
+dfCSC_SF = dfCSC[["S", "Frequência"]]
+dfACC_SF = dfACC[["S", "Frequência"]]
+dfASC_SF = dfASC[["S", "Frequência"]]
+
+dfCCC_SF['S'] = dfCCC_SF['S'].str.replace(r'\[|\]', '', regex=True)
+dfCSC_SF['S'] = dfCSC_SF['S'].str.replace(r'\[|\]', '', regex=True)
+dfACC_SF['S'] = dfACC_SF['S'].str.replace(r'\[|\]', '', regex=True)
+dfASC_SF['S'] = dfASC_SF['S'].str.replace(r'\[|\]', '', regex=True)
+
+dfCSC_SF = dfCSC_SF.dropna(subset=["S", "Frequência"])
+dfACC_SF = dfACC_SF.dropna(subset=["S", "Frequência"])
+dfASC_SF = dfASC_SF.dropna(subset=["S", "Frequência"])
+dfCCC_SF = dfCCC_SF.dropna(subset=["S", "Frequência"])
+
+dfCCC_SF = dfCCC_SF[dfCCC_SF['S'].str.match(r'^[A-Z][a-z]+ [a-z]+$')]
+dfCSC_SF = dfCSC_SF[dfCSC_SF['S'].str.match(r'^[A-Z][a-z]+ [a-z]+$')]
+dfACC_SF = dfACC_SF[dfACC_SF['S'].str.match(r'^[A-Z][a-z]+ [a-z]+$')]
+dfASC_SF = dfASC_SF[dfASC_SF['S'].str.match(r'^[A-Z][a-z]+ [a-z]+$')]
+
+
+dfCCC_SF.insert(0, "Local", "CCC")
+dfCSC_SF.insert(0, "Local", "CSC")
+dfACC_SF.insert(0, "Local", "ACC")
+dfASC_SF.insert(0, "Local", "ASC")
+
+# Concatenando os dataframes
+df_final = pd.concat([dfCCC_SF, dfCSC_SF, dfACC_SF, dfASC_SF], ignore_index=True)
+df_final = df_final.loc[df_final.groupby(["Local", "S"])["Frequência"].idxmax()]# Especificando o caminho para salvar o arquivo
+caminho_saida = r'C:/users/andre/Downloads/species_count_all_samples_long.txt'
+
+# Salvando o DataFrame como um arquivo .txt (separado por tabulação)
+df_final.to_csv(caminho_saida, sep='\t', index=False, encoding='utf-8')
+
+print(f"Arquivo salvo em: {caminho_saida}")
+
+# Transformando o dataframe para o formato desejado
+df_pivot = df_final.pivot_table(
+    index="S",           # Índice: Espécies
+    columns="Local",     # Colunas: Locais
+    values="Frequência", # Valores: Frequência
+    fill_value=0         # Preencher valores ausentes com 0
+)
+
+# Transformando o índice em uma coluna normal
+df_pivot = df_pivot.reset_index()
+# Transpondo o dataframe
+df_transposto = df_pivot.T
+# Salvando o DataFrame transformado
+caminho_saida_pivot = r'C:/users/andre/Downloads/species_count_all_samples.txt'
+caminho_saida_pivot_t = r'C:/users/andre/Downloads/species_count_all_samples_t.txt'
+
+df_pivot.to_csv(caminho_saida_pivot, sep='\t', encoding='utf-8')
+df_transposto.to_csv(caminho_saida_pivot_t, sep='\t', encoding='utf-8')
