@@ -1,0 +1,38 @@
+import pandas as pd
+import numpy as np
+
+# Caminho do arquivo
+caminho_arquivo = r'C:/users/andre/Downloads/species_count_all_samples_abrel.txt'
+
+# Importa o DataFrame a partir do arquivo .txt separado por tabulação
+data = pd.read_csv(caminho_arquivo, sep='\t')
+
+# Transpor o dataframe para ter a estrutura esperada
+df = pd.DataFrame(data).set_index("Especie").T.reset_index()
+df.rename(columns={"index": "Grupo"}, inplace=True)
+caminho_saida2 = r'C:/users/andre/Downloads/species_count_all_samples_abrel_t.txt'
+df.to_csv(caminho_saida2, sep='\t', index=False)
+
+# Função para gerar amostras bootstrap
+def gerar_bootstrap(df):
+    novo_df = pd.DataFrame(columns=df.columns)  # Novo dataframe
+    for _, linha in df.iterrows():
+        grupo = linha["Grupo"]  # Nome do grupo original
+        valores = linha[1:].values  # Valores das espécies (exceto o Grupo)
+        # Criar 9 novas amostras bootstrap com reposição
+        novas_amostras = np.random.choice(valores, size=(99, len(valores)), replace=True)
+        # Adicionar a linha original mais as novas amostras
+        for amostra in [valores, *novas_amostras]:
+            nova_linha = [grupo] + list(amostra)
+            novo_df.loc[len(novo_df)] = nova_linha
+    return novo_df
+
+# Gerar o novo dataframe com 40 linhas (10 para cada grupo)
+novo_dataframe = gerar_bootstrap(df)
+
+# Salvar o novo dataframe como arquivo .txt separado por tabulação
+caminho_saida = r'C:/users/andre/Downloads/species_count_all_samples_abrel_t_boot.txt'
+#novo_dataframe.to_csv(caminho_saida, sep='\t', index=False)
+novo_dataframe.to_csv(caminho_saida, sep='\t', index=False)
+
+print(f"Arquivo salvo em: {caminho_saida}")
