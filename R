@@ -1,0 +1,340 @@
+# Carregar o pacote vegan (caso não tenha instalado, use install.packages("vegan"))
+library(vegan)
+
+# Criar um conjunto de carine_taxo_species_final_t hipotético
+# Contagem de espécies em 4 Grupos (Local1, Local2, Local3, Local4)
+#set.seed(123) # Para reprodutibilidade
+#carine_taxo_species_final_t <- data.frame(
+# Grupo = rep(c("Local1", "Local2", "Local3", "Local4"), each = 5),
+#  Especie1 = c(rpois(5, 10), rpois(5, 15), rpois(5, 20), rpois(5, 25)),
+#  Especie2 = c(rpois(5, 5), rpois(5, 10), rpois(5, 8), rpois(5, 12)),
+#  Especie3 = c(rpois(5, 8), rpois(5, 6), rpois(5, 15), rpois(5, 18))
+#)
+species_count_all_samples_t_boot$Grupo <- as.factor(species_count_all_samples_t_boot$Grupo)
+
+# Criar uma matriz de distâncias (Bray-Curtis)
+matriz_dissimilaridade <- vegdist(species_count_all_samples_t_boot[, -1], method = "bray")
+
+# Realizar a PERMANOVA
+resultado_permanova <- adonis2(matriz_dissimilaridade ~ Grupo, data = species_count_all_samples_t_boot)
+
+# Mostrar o resultado
+print(resultado_permanova)
+
+if (!require(vegan)) install.packages("vegan")
+if (!require(pairwiseAdonis)) install.packages("devtools") # Pairwise Adonis precisa ser instalado via github
+devtools::install_github("pmartinezarbizu/pairwiseAdonis")
+
+# Carregar o pacote pairwiseAdonis
+library(pairwiseAdonis)
+
+# Realizar o pairwise PERMANOVA
+pairwise_results <- pairwise.adonis2(matriz_dissimilaridade ~ Grupo, data = species_count_all_samples_t_boot, permutations = 999)
+print(pairwise_results)
+
+# Realizar uma análise PCoA (Principal Coordinates Analysis)
+resultado_pcoa <- cmdscale(matriz_dissimilaridade, eig = TRUE, k = 2) # k = 2 para 2 dimensões
+pcoa_df <- data.frame(
+  Grupo = species_count_all_samples_t_boot$Grupo,
+  Dim1 = resultado_pcoa$points[, 1],
+  Dim2 = resultado_pcoa$points[, 2]
+)
+
+# Calcular a porcentagem de variação explicada pelos dois primeiros eixos
+var_explicada <- resultado_pcoa$eig / sum(resultado_pcoa$eig) * 100
+dim1_var <- round(var_explicada[1], 2)
+dim2_var <- round(var_explicada[2], 2)
+
+# Adicionar rótulos aos grupos no dataframe PCoA
+pcoa_df$Grupo <- as.factor(pcoa_df$Grupo)
+
+# Carregar o pacote ggplot2 (caso não esteja instalado, use install.packages("ggplot2"))
+library(ggplot2)
+
+# Criar o gráfico PCoA com elipses para cada Grupo
+grafico_pcoa <- ggplot(pcoa_df, aes(x = Dim1, y = Dim2, color = Grupo)) +
+  geom_point(size = 3) +  # Pontos representando amostras
+  stat_ellipse(type = "norm", level = 0.95) +  # Elipses para 95% de confiança
+  theme_minimal() +  # Tema minimalista para o gráfico
+  labs(
+    x = paste0("Dim 1 (", dim1_var, "%)"),
+    y = paste0("Dim 2 (", dim2_var, "%)"),
+    title = "PCoA com Elipses por Grupo"
+  ) +
+  theme(
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 10),
+    axis.title = element_text(size = 12),
+    plot.title = element_text(hjust = 0.5, size = 14)
+  )
+
+# Exibir o gráfico
+print(grafico_pcoa)
+
+# Realizar uma análise NMDS (Non-metric Multidimensional Scaling)
+#set.seed(123) # Para reprodutibilidade
+head(matriz_dissimilaridade)
+resultado_nmds <- metaMDS(matriz_dissimilaridade, k = 2, trymax = 20)
+
+# Visualizar o resultado do NMDS
+print(resultado_nmds)
+
+# Extrair as coordenadas do NMDS
+nmds_coords <- as.data.frame(scores(resultado_nmds)) # Coordenadas das amostras
+nmds_coords$Grupo <- species_count_all_samples_t_boot          # Adicionar as Grupos
+
+# Criar o gráfico NMDS com ggplot2
+grafico_nmds <- ggplot(nmds_coords, aes(x = NMDS1, y = NMDS2, color = Grupo)) +
+  geom_point(size = 3) +  # Pontos representando as amostras
+  stat_ellipse(type = "norm", level = 0.95) +  # Elipses de 95% de confiança
+  theme_minimal() +  # Tema limpo
+  labs(
+    x = "NMDS Dim 1",
+    y = "NMDS Dim 2",
+    title = "NMDS com Elipses por Grupo"
+  ) +
+  theme(
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 10),
+    axis.title = element_text(size = 12),
+    plot.title = element_text(hjust = 0.5, size = 14)
+  )
+
+# Exibir o gráfico
+print(grafico_nmds)
+unique(nmds_coords$Grupo)
+# Realizar o ANOSIM
+resultado_anosim <- anosim(matriz_dissimilaridade, grouping = species_count_all_samples_t_boot$Grupo)
+
+# Exibir o resultado do ANOSIM
+print(resultado_anosim)
+
+# Criar um gráfico para visualizar o resultado
+plot(resultado_anosim, main = "ANOSIM - Diferenças entre Grupos")
+
+# Instalar e carregar o pacote Rtsne, caso ainda não esteja instalado
+# install.packages("Rtsne")
+library(Rtsne)
+
+# Preparar os carine_taxo_species_final2_ab_rel para o t-SNE
+# Remover a coluna 'Grupo', pois o t-SNE utiliza apenas as matrizes numéricas
+species_count_all_samples_t_boot_tsne <- species_count_all_samples_t_boot[, -1] # Excluindo a coluna de Grupos
+
+# Realizar o t-SNE
+set.seed(123) # Para reprodutibilidade
+resultado_tsne <- Rtsne(as.matrix(species_count_all_samples_t_boot_tsne), dims = 2, perplexity = 20, verbose = TRUE, max_iter = 500)
+
+# Extrair as coordenadas do t-SNE e adicionar as Grupos
+tsne_coords <- as.data.frame(resultado_tsne$Y) # Coordenadas do t-SNE
+colnames(tsne_coords) <- c("Dim1", "Dim2")
+tsne_coords$Grupo <- species_count_all_samples_t_boot$Grupo
+
+# Criar o gráfico do t-SNE com elipses
+grafico_tsne <- ggplot(tsne_coords, aes(x = Dim1, y = Dim2, color = Grupo)) +
+  geom_point(size = 3) +  # Adicionar pontos das amostras
+  stat_ellipse(type = "norm", level = 0.95) +  # Adicionar elipses com nível de confiança de 95%
+  theme_minimal() +  # Tema minimalista para um visual limpo
+  labs(
+    title = "Visualização t-SNE com Elipses",
+    x = "t-SNE Dim 1",
+    y = "t-SNE Dim 2"
+  ) +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 14),
+    axis.title = element_text(size = 12),
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 10)
+  )
+
+# Exibir o gráfico
+print(grafico_tsne)
+
+#######################
+
+# Pacotes necessários
+library(vegan)
+
+# Criando um conjunto de dados hipotético
+#set.seed(123) # Para reprodutibilidade
+locais <- c("Local_A", "Local_B", "Local_C", "Local_D")
+especies <- paste0("Especie_", 1:10)
+
+# Gerando contagens aleatórias de espécies por local
+dados <- as.data.frame(matrix(sample(0:50, 40, replace = TRUE), nrow = 4, ncol = 10))
+rownames(dados) <- locais
+colnames(dados) <- especies
+
+# Visualizando os dados
+print("Conjunto de dados de contagem de espécies:")
+print(dados)
+
+# Diversidade alfa (Shannon)
+# Supondo que "carine_taxo_species_final" seja o seu data frame
+# Transformando a primeira coluna em rownames
+rownames(species_count_all_samples_t) <- species_count_all_samples_t[, 1]  # Define a primeira coluna como nomes das linhas
+species_count_all_samples_t <- species_count_all_samples_t[, -1]  # Remove a primeira coluna
+
+# Conferindo o resultado
+# Supondo que seu dataframe se chame 'meu_dataframe'
+print("Data frame após mover a primeira coluna para rownames:")
+diversidade_alfa <- diversity(species_count_all_samples_t, index = "shannon")
+print("Diversidade alfa (Shannon) por local:")
+print(diversidade_alfa)
+
+# Diversidade beta (Bray-Curtis)
+distancia_bray_curtis <- vegdist(species_count_all_samples_t, method = "bray")
+print("Distância de Bray-Curtis entre locais:")
+print(as.matrix(distancia_bray_curtis))
+
+################################################################################
+install.packages("tidyverse")
+install.packages("betapart")
+install.packages("wesanderson")
+install.packages("reshape2")
+library(tidyverse)
+library(betapart)
+library(wesanderson)
+library(reshape2)
+data(ceram.s)
+# Use esse código caso seus dados sejam de abundância.
+rownames(species_count_all_samples_t) <- species_count_all_samples_t[, 1]  # Define a primeira coluna como nomes das linhas
+species_count_all_samples_t <- species_count_all_samples_t[, -1]  # Remove a primeira coluna
+species_count_all_samples_t <- ifelse(species_count_all_samples_t > 0, 1, 0)
+species_count_all_samples_t[is.na(species_count_all_samples_t)] <- 0
+
+beta_total <- beta.multi(species_count_all_samples_t,
+                         index.family = "sorensen")
+beta_total
+beta_par <- beta.pair(species_count_all_samples_t,
+                      index.family = "sorensen")
+get_upper_tri <- function(cormat){
+  cormat[lower.tri(cormat)]<- NA
+  return(cormat)
+}
+
+sim <- get_upper_tri(as.matrix(beta_par$beta.sim))
+
+sor <- get_upper_tri(as.matrix(beta_par$beta.sor))
+
+sne <- get_upper_tri(as.matrix(beta_par$beta.sne))
+
+melted_cormat <- reshape2::melt(sim)
+melted_cormat2 <- reshape2::melt(sor)
+melted_cormat3 <- reshape2::melt(sne)
+
+melted_cormat <- rbind(melted_cormat2, melted_cormat, melted_cormat3)
+
+melted_cormat$metric <- factor(rep(c("Total", "Turnover", "Aninhamento"), 
+                                   each = nrow(melted_cormat2)), 
+                               c("Total", "Turnover", "Aninhamento"))
+
+pal <- wes_palette("Zissou1", 100, type = "continuous")
+g <- ggplot(data = melted_cormat, aes(Var2, Var1, fill = value))+
+  geom_tile(color = "white")+
+  scale_fill_gradientn(colours = pal, 
+                       name="Diversidade Beta") +
+  theme_minimal()+ 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 0),
+        text = element_text(size = 16)) +
+  coord_fixed() +
+  xlab("") +
+  ylab("") +
+  facet_wrap(metric ~.) +
+  ggtitle("Componentes da beta diversidade entre localidades")
+g
+
+##############################################
+
+# Instalar o pacote vegan (se ainda não estiver instalado)
+install.packages("vegan")
+
+# Carregar o pacote
+library(vegan)
+
+# Dados de exemplo: locais vs espécies
+dados <- data.frame(
+  Local1 = c(10, 5, 3, 0, 2),
+  Local2 = c(4, 8, 0, 6, 1),
+  Local3 = c(3, 7, 2, 5, 0),
+  Local4 = c(9, 0, 4, 3, 1)
+)
+
+rownames(species_count_all_samples) <- species_count_all_samples[, 1]  # Define a primeira coluna como nomes das linhas
+species_count_all_samples <- species_count_all_samples[, -1]
+# Transpor os dados (linhas como amostras e colunas como espécies)
+curva_rarefacao <- t(dados)
+
+# Gerar a curva de rarefação
+# Gerar o gráfico com as curvas de rarefação
+curva <- rarecurve(curva_rarefacao, step = 1, sample = min(rowSums(curva_rarefacao)), col = c("blue", "red", "green", "purple"), label = FALSE)
+
+# Adicionar uma legenda fora da área do gráfico
+legend(
+  "topright",                      # Posição da legenda ('topright' é um exemplo, veja opções abaixo)
+  legend = c("Local 1", "Local 2", "Local 3", "Local 4"),  # Nomes das curvas
+  col = c("blue", "red", "green", "purple"), # Cores correspondentes às curvas
+  lty = 1,                         # Tipo de linha (1 = linha sólida)
+  cex = 0.8,                       # Tamanho do texto da legenda (0.8 deixa menor e elegante)
+  bty = "n"                        # Remove o fundo da legenda para deixar mais limpo
+)
+
+
+######################################################
+#NMDS 3D
+
+# Instalar pacotes necessários (se ainda não instalados)
+install.packages("vegan")
+install.packages("plotly")
+
+# Carregar pacotes
+library(vegan)
+library(plotly)
+
+# Criar o conjunto de dados fictício de contagem de espécies
+set.seed(123)
+data <- data.frame(
+  Localidade = rep(c("A", "B", "C", "D"), each = 5),
+  Especie1 = sample(1:100, 20, replace = TRUE),
+  Especie2 = sample(1:100, 20, replace = TRUE),
+  Especie3 = sample(1:100, 20, replace = TRUE),
+  Especie4 = sample(1:100, 20, replace = TRUE),
+  Especie5 = sample(1:100, 20, replace = TRUE)
+)
+data <- species_count_all_samples_t_boot
+# Calcular a matriz de distâncias (Bray-Curtis)
+dist_matrix <- vegdist(data[,-1], method = "bray")
+
+# Realizar o NMDS com k = 3
+nmds <- metaMDS(dist_matrix, k = 3, trymax = 50)
+
+# Obter os escores NMDS em um data frame
+nmds_df <- as.data.frame(nmds$points)
+colnames(nmds_df) <- c("Dim1", "Dim2", "Dim3")
+nmds_df$Grupo <- data$Grupo
+
+# Criar um gráfico interativo em 3D usando plotly
+fig <- plot_ly(
+  data = nmds_df,
+  x = ~Dim1,
+  y = ~Dim2,
+  z = ~Dim3,
+  type = "scatter3d",
+  mode = "markers",
+  color = ~Grupo,
+  marker = list(size = 5),
+  text = ~Grupo
+)
+
+# Personalizar o layout do gráfico
+fig <- fig %>% layout(
+  title = "NMDS Interativo em 3D",
+  scene = list(
+    xaxis = list(title = "Dimensão 1"),
+    yaxis = list(title = "Dimensão 2"),
+    zaxis = list(title = "Dimensão 3")
+  )
+)
+
+# Salvar o gráfico como um arquivo HTML e abrir no navegador
+htmlwidgets::saveWidget(fig, "grafico_nmds.html")
+browseURL("grafico_nmds.html")
