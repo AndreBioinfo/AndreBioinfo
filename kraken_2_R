@@ -1,0 +1,290 @@
+
+import os
+import pandas as pd
+import numpy as np
+
+# Diretório onde os arquivos estão localizados
+diretorio = '/home/andreoliveira/Downloads/kraken_carine/'
+
+# Listar os arquivos no diretório
+arquivos = [arquivo for arquivo in os.listdir(diretorio) if arquivo.endswith('.report')]
+
+# Loop pelos arquivos no diretório
+for arquivo in arquivos:
+    caminho_arquivo = os.path.join(diretorio, arquivo)
+
+    # Abrir o arquivo e ler as linhas
+    with open(caminho_arquivo, 'r') as file:
+        lines = file.readlines()
+
+    # Criar uma lista de tuplas para armazenar os dados de interesse
+    data = []
+    unique_values_4th_column = set()
+
+    for line in lines[1:]:
+        column = line.split('\t')
+        forth_column = column[3]
+        taxon_name = column[-1].strip()
+        number = int(column[2])
+
+        data.append((forth_column, taxon_name, number))
+        unique_values_4th_column.add(forth_column)
+
+    colunas_unicas = []
+    for coluna, _, _ in data:
+        if coluna not in colunas_unicas:
+            colunas_unicas.append(coluna)
+
+    letters = ['R', 'D', 'K', 'P', 'C', 'O', 'F', 'G', 'S']
+    numbers = ['1', '2', '3', '4']
+    letters_values = {}
+
+    value = 1
+    for letra in letters:
+        letters_values[letra] = value
+        value += 1
+        for i, num in enumerate(numbers):
+            letters_values[letra + num] = value
+            value += 1
+
+    dados = {coluna: [None] * len(data) for coluna in colunas_unicas}
+    dados['Frequência'] = [None] * len(data)
+
+    for i, (coluna, valor, frequencia) in enumerate(data):
+        dados[coluna][i] = valor
+        dados['Frequência'][i] = frequencia
+
+    colunas_unicas_ordenadas = sorted(colunas_unicas, key=lambda coluna: letters_values.get(coluna, float('inf')))
+    colunas_unicas_ordenadas.append('Frequência')
+
+    df = pd.DataFrame(dados)[colunas_unicas_ordenadas]
+
+    for i in range(1, len(df)):
+        colunas_com_valor = df.columns[df.iloc[i].notna()].tolist()
+        for coluna in colunas_com_valor:
+            if coluna in letters_values:
+                hierarquia_atual = letters_values[coluna]
+                for col in df.columns:
+                    if col in letters_values and letters_values[col] < hierarquia_atual:
+                        df.at[i, col] = df.at[i - 1, col]
+
+    df_cleaned = df.fillna('')
+
+    # Especificar o nome do arquivo de saída
+    caminho_saida = os.path.join(diretorio, f'df_kraken_output_{arquivo}.txt')
+    
+    # Salvar o DataFrame como um arquivo TXT
+    df_cleaned.to_csv(caminho_saida, sep='\t', index=False)
+
+    print(f"DataFrame do arquivo {arquivo} salvo como {caminho_saida}")
+    
+caminho_arquivo = '/home/andreoliveira/Downloads/kraken_carine/df_kraken_output_A22CCC_3.report.txt'
+caminho_arquivo2 = '/home/andreoliveira/Downloads/kraken_carine/df_kraken_output_A22CSC_8.report.txt'
+caminho_arquivo3 = '/home/andreoliveira/Downloads/kraken_carine/df_kraken_output_A22ACC_13.report.txt'
+caminho_arquivo4 = '/home/andreoliveira/Downloads/kraken_carine/df_kraken_output_A22ASC_18.report.txt'
+
+dfCCC = pd.read_csv(caminho_arquivo, sep='\t')
+dfCSC = pd.read_csv(caminho_arquivo2, sep='\t')
+dfACC = pd.read_csv(caminho_arquivo3, sep='\t')
+dfASC = pd.read_csv(caminho_arquivo4, sep='\t')
+
+dfCCC_SF = dfCCC[["S", "Frequência"]]
+dfCSC_SF = dfCSC[["S", "Frequência"]]
+dfACC_SF = dfACC[["S", "Frequência"]]
+dfASC_SF = dfASC[["S", "Frequência"]]
+
+dfCCC_SF['S'] = dfCCC_SF['S'].str.replace(r'\[|\]', '', regex=True)
+dfCSC_SF['S'] = dfCSC_SF['S'].str.replace(r'\[|\]', '', regex=True)
+dfACC_SF['S'] = dfACC_SF['S'].str.replace(r'\[|\]', '', regex=True)
+dfASC_SF['S'] = dfASC_SF['S'].str.replace(r'\[|\]', '', regex=True)
+
+dfCSC_SF = dfCSC_SF.dropna(subset=["S", "Frequência"])
+dfACC_SF = dfACC_SF.dropna(subset=["S", "Frequência"])
+dfASC_SF = dfASC_SF.dropna(subset=["S", "Frequência"])
+dfCCC_SF = dfCCC_SF.dropna(subset=["S", "Frequência"])
+
+
+# 1. Ordenar por frequência decrescente e remover duplicatas iniciais
+dfACC_SF = dfACC_SF.sort_values('Frequência', ascending=False).drop_duplicates(subset=['S'])
+dfASC_SF = dfASC_SF.sort_values('Frequência', ascending=False).drop_duplicates(subset=['S'])
+dfCCC_SF = dfCCC_SF.sort_values('Frequência', ascending=False).drop_duplicates(subset=['S'])
+dfCSC_SF = dfCSC_SF.sort_values('Frequência', ascending=False).drop_duplicates(subset=['S'])
+
+# 2. Criar a coluna Nome_Base para lidar com nomes contendo 'sp.'
+dfACC_SF['Nome_Base'] = dfACC_SF['S'].apply(lambda x: x.split(" sp.")[0] if "sp." in x else x)
+dfASC_SF['Nome_Base'] = dfASC_SF['S'].apply(lambda x: x.split(" sp.")[0] if "sp." in x else x)
+dfCCC_SF['Nome_Base'] = dfCCC_SF['S'].apply(lambda x: x.split(" sp.")[0] if "sp." in x else x)
+dfCSC_SF['Nome_Base'] = dfCSC_SF['S'].apply(lambda x: x.split(" sp.")[0] if "sp." in x else x)
+
+# 3. Agrupar e somar frequências somente para os que possuem "sp."
+dfACC_SF_agrupado = dfACC_SF.groupby(['Nome_Base'], as_index=False).agg({
+    'Frequência': 'sum',
+    'S': 'first'  # Mantém o valor original em 'S' para nomes sem 'sp.'
+})
+
+dfASC_SF_agrupado = dfASC_SF.groupby(['Nome_Base'], as_index=False).agg({
+    'Frequência': 'sum',
+    'S': 'first'  # Mantém o valor original em 'S' para nomes sem 'sp.'
+})
+dfCCC_SF_agrupado = dfCCC_SF.groupby(['Nome_Base'], as_index=False).agg({
+    'Frequência': 'sum',
+    'S': 'first'  # Mantém o valor original em 'S' para nomes sem 'sp.'
+})
+dfCSC_SF_agrupado = dfCSC_SF.groupby(['Nome_Base'], as_index=False).agg({
+    'Frequência': 'sum',
+    'S': 'first'  # Mantém o valor original em 'S' para nomes sem 'sp.'
+})
+
+# 4. Substituir pelo padrão único '[Nome] sp.' para os que possuem 'sp.'
+dfACC_SF_agrupado['S'] = dfACC_SF_agrupado.apply(
+    lambda row: f"{row['Nome_Base']} sp." if "sp." in row['S'] else row['S'],
+    axis=1
+)
+dfASC_SF_agrupado['S'] = dfASC_SF_agrupado.apply(
+    lambda row: f"{row['Nome_Base']} sp." if "sp." in row['S'] else row['S'],
+    axis=1
+)
+dfCCC_SF_agrupado['S'] = dfCCC_SF_agrupado.apply(
+    lambda row: f"{row['Nome_Base']} sp." if "sp." in row['S'] else row['S'],
+    axis=1
+)
+dfCSC_SF_agrupado['S'] = dfCSC_SF_agrupado.apply(
+    lambda row: f"{row['Nome_Base']} sp." if "sp." in row['S'] else row['S'],
+    axis=1
+)
+# 5. Resultado final (removendo a coluna temporária Nome_Base)
+dfACC_SF_final = dfACC_SF_agrupado.drop(columns=['Nome_Base'])
+dfASC_SF_final = dfASC_SF_agrupado.drop(columns=['Nome_Base'])
+dfCCC_SF_final = dfCCC_SF_agrupado.drop(columns=['Nome_Base'])
+dfCSC_SF_final = dfCSC_SF_agrupado.drop(columns=['Nome_Base'])
+
+
+dfCCC_SF = dfCCC_SF_final
+dfCSC_SF = dfCSC_SF_final
+dfACC_SF = dfACC_SF_final
+dfASC_SF = dfASC_SF_final
+
+dfCCC_S = dfCCC_SF[["S"]]
+dfCSC_S = dfCSC_SF[["S"]]
+dfACC_S = dfACC_SF[["S"]]
+dfASC_S = dfASC_SF[["S"]]
+
+for df in [dfCCC_S, dfCSC_S, dfACC_S, dfASC_S]:
+    df.drop_duplicates(subset=["S"], inplace=True)  # Remove duplicados
+
+caminho_saida_CCC = '/home/andreoliveira/Downloads/kraken_carine/output_CCC_S.txt'
+caminho_saida_CSC = '/home/andreoliveira/Downloads/kraken_carine/output_CSC_S.txt'
+caminho_saida_ACC = '/home/andreoliveira/Downloads/kraken_carine/output_ACC_S.txt'
+caminho_saida_ASC = '/home/andreoliveira/Downloads/kraken_carine/output_ASC_S.txt'
+
+dfCCC_S.to_csv(caminho_saida_CCC, sep='\t', index=False, header=False)
+dfCSC_S.to_csv(caminho_saida_CSC, sep='\t', index=False, header=False)
+dfACC_S.to_csv(caminho_saida_ACC, sep='\t', index=False, header=False)
+dfASC_S.to_csv(caminho_saida_ASC, sep='\t', index=False, header=False)
+
+dfCCC_SF.insert(0, "Local", "CCC")
+dfCSC_SF.insert(0, "Local", "CSC")
+dfACC_SF.insert(0, "Local", "ACC")
+dfASC_SF.insert(0, "Local", "ASC")
+
+df_final = pd.concat([dfCCC_SF, dfCSC_SF, dfACC_SF, dfASC_SF], ignore_index=True)
+df_final = df_final.loc[df_final.groupby(["Local", "S"])["Frequência"].idxmax()]
+caminho_saida = '/home/andreoliveira/Downloads/species_count_all_samples_long.txt'
+
+df_final.to_csv(caminho_saida, sep='\t', index=False, encoding='utf-8')
+
+print(f"Arquivo salvo em: {caminho_saida}")
+
+# Transformando o dataframe para o formato desejado
+df_pivot = df_final.pivot_table(
+    index="S",           # Índice: Espécies
+    columns="Local",     # Colunas: Locais
+    values="Frequência", # Valores: Frequência
+    fill_value=0         # Preencher valores ausentes com 0
+)
+
+df_pivot = df_pivot.reset_index()
+
+df_transposto = df_pivot.T
+
+caminho_saida_pivot = '/home/andreoliveira/Downloads/kraken_carine/species_count_all_samples.txt'
+caminho_saida_pivot_t = '/home/andreoliveira/Downloads/kraken_carine/species_count_all_samples_t.txt'
+
+df_pivot.to_csv(caminho_saida_pivot, sep='\t', encoding='utf-8')
+df_transposto.to_csv(caminho_saida_pivot_t, sep='\t', encoding='utf-8')
+
+print(f"Arquivos salvos:")
+print(f"CCC: {caminho_saida_CCC}")
+print(f"CSC: {caminho_saida_CSC}")
+print(f"ACC: {caminho_saida_ACC}")
+print(f"ASC: {caminho_saida_ASC}")
+"""
+"""
+# Caminho do arquivo
+caminho_arquivo = '/home/andreoliveira/Downloads/kraken_carine/species_count_all_samples.txt'
+
+# Importa o DataFrame a partir do arquivo .txt separado por tabulação
+data = pd.read_csv(caminho_arquivo, sep='\t')
+print(data)
+
+# Transpor o dataframe para ter a estrutura esperada
+df = pd.DataFrame(data).set_index("S").T.reset_index()
+df.rename(columns={"index": "Grupo"}, inplace=True)
+
+#df.columns = df.iloc[0]  # Define a linha 0 como cabeçalho
+df = df[1:].reset_index(drop=True)  # Remove a linha 0 antiga e redefine os índices
+
+# Função para gerar amostras bootstrap
+def gerar_bootstrap(df):
+    novo_df = pd.DataFrame(columns=df.columns)  # Novo dataframe
+    for _, linha in df.iterrows():
+        grupo = linha["Grupo"]  # Nome do grupo original
+        valores = linha[1:].values  # Valores das espécies (exceto o Grupo)
+        # Criar 9 novas amostras bootstrap com reposição
+        novas_amostras = np.random.choice(valores, size=(99, len(valores)), replace=True)
+        # Adicionar a linha original mais as novas amostras
+        for amostra in [valores, *novas_amostras]:
+            nova_linha = [grupo] + list(amostra)
+            novo_df.loc[len(novo_df)] = nova_linha
+    return novo_df
+
+# Gerar o novo dataframe com 40 linhas (10 para cada grupo)
+novo_dataframe = gerar_bootstrap(df)
+
+# Salvar o novo dataframe como arquivo .txt separado por tabulação
+caminho_saida = '/home/andreoliveira/Downloads/kraken_carine/species_count_all_samples_t_boot.txt'
+#novo_dataframe.to_csv(caminho_saida, sep='\t', index=False)
+novo_dataframe.to_csv(caminho_saida, sep='\t', index=False)
+
+print(f"Arquivo salvo em: {caminho_saida}")
+
+
+# Transforma os valores de cada célula em valores relativos
+data2 = pd.DataFrame(data)
+numeric_columns = data2.select_dtypes(include="number").columns  # Seleciona colunas numéricas
+data2[numeric_columns] = data2[numeric_columns].div(data2[numeric_columns].sum(axis=0), axis=1)
+
+# Verifica se o somatório de cada coluna numérica é igual a 1
+column_sums = data2[numeric_columns].sum(axis=0)
+
+# Impressão dos resultados
+print("DataFrame com valores relativos:")
+print(df)
+print("\nSomas das colunas numéricas (deve ser igual a 1):")
+print(column_sums)
+
+# Transpor o dataframe para ter a estrutura esperada
+df2 = pd.DataFrame(data2).set_index("S").T.reset_index()
+df2.rename(columns={"index": "Grupo"}, inplace=True)
+
+
+#df.columns = df.iloc[0]  # Define a linha 0 como cabeçalho
+df2 = df2[1:].reset_index(drop=True)
+
+novo_dataframe2 = gerar_bootstrap(df2) 
+# Salvar o novo dataframe como arquivo .txt separado por tabulação
+caminho_saida2 = '/home/andreoliveira/Downloads/kraken_carine/species_count_all_samples_abrel_t_boot.txt'
+#novo_dataframe.to_csv(caminho_saida, sep='\t', index=False)
+novo_dataframe2.to_csv(caminho_saida2, sep='\t', index=False)
+
+print(f"Arquivo salvo em: {caminho_saida2}")
